@@ -775,6 +775,7 @@ static inline int MPIDI_OFI_create_endpoint(struct fi_info *prov_use,
         if (do_tagged) {
             tx_attr = *prov_use->tx_attr;
             tx_attr.caps = FI_TAGGED;
+            tx_attr.caps |= FI_SEND;
             tx_attr.op_flags = FI_COMPLETION | FI_INJECT_COMPLETE;
             MPIDI_OFI_CALL(fi_tx_context(*ep, idx_off, &tx_attr, &MPIDI_OFI_EP_TX_TAG(index), NULL), ep);
             MPIDI_OFI_CALL(fi_ep_bind(MPIDI_OFI_EP_TX_TAG(index), &p2p_cq->fid, FI_SEND | FI_SELECTIVE_COMPLETION), bind);
@@ -783,6 +784,8 @@ static inline int MPIDI_OFI_create_endpoint(struct fi_info *prov_use,
         tx_attr = *prov_use->tx_attr;
         tx_attr.caps = FI_RMA;
         tx_attr.caps |= FI_ATOMICS;
+        tx_attr.caps |= FI_READ;
+        tx_attr.caps |= FI_WRITE;
         tx_attr.op_flags = FI_COMPLETION | FI_DELIVERY_COMPLETE;
         MPIDI_OFI_CALL(fi_tx_context(*ep, idx_off + 1, &tx_attr, &MPIDI_OFI_EP_TX_RMA(index), NULL),
                        ep);
@@ -792,6 +795,7 @@ static inline int MPIDI_OFI_create_endpoint(struct fi_info *prov_use,
 
         tx_attr = *prov_use->tx_attr;
         tx_attr.caps = FI_MSG;
+        tx_attr.caps |= FI_SEND;
         tx_attr.op_flags = FI_COMPLETION | FI_INJECT_COMPLETE;
         MPIDI_OFI_CALL(fi_tx_context(*ep, idx_off + 2, &tx_attr, &MPIDI_OFI_EP_TX_MSG(index), NULL),
                        ep);
@@ -800,6 +804,8 @@ static inline int MPIDI_OFI_create_endpoint(struct fi_info *prov_use,
         tx_attr = *prov_use->tx_attr;
         tx_attr.caps = FI_RMA;
         tx_attr.caps |= FI_ATOMICS;
+        tx_attr.caps |= FI_READ;
+        tx_attr.caps |= FI_WRITE;
         tx_attr.op_flags = FI_DELIVERY_COMPLETE;
         MPIDI_OFI_CALL(fi_tx_context(*ep, idx_off + 3, &tx_attr, &MPIDI_OFI_EP_TX_CTR(index), NULL),
                        ep);
@@ -813,6 +819,7 @@ static inline int MPIDI_OFI_create_endpoint(struct fi_info *prov_use,
         if (do_tagged) {
             rx_attr = *prov_use->rx_attr;
             rx_attr.caps = FI_TAGGED;
+            rx_attr.caps |= FI_RECV;
             if (do_data)
                 rx_attr.caps |= FI_DIRECTED_RECV;
             rx_attr.op_flags = 0;
@@ -836,6 +843,7 @@ static inline int MPIDI_OFI_create_endpoint(struct fi_info *prov_use,
 
         rx_attr = *prov_use->rx_attr;
         rx_attr.caps = FI_MSG;
+        rx_attr.caps |= FI_RECV;
         rx_attr.caps |= FI_MULTI_RECV;
         if (do_data)
             rx_attr.caps |= FI_DIRECTED_RECV;
