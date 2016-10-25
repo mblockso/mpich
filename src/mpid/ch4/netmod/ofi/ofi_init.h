@@ -129,9 +129,9 @@ static inline int MPIDI_OFI_init_generic(int rank,
     MPIR_Assert(hints != NULL);
 
     hints->mode = FI_CONTEXT | FI_ASYNC_IOV;    /* We can handle contexts  */
-    hints->caps = 0ULL; /* Tag matching interface  */
-    hints->caps |= FI_RMA;      /* RMA(read/write)         */
-    hints->caps |= FI_ATOMICS;  /* Atomics capabilities    */
+    hints->caps = FI_SEND | FI_RECV;            /* Basic send/recv capabilities */
+    hints->caps |= FI_RMA | FI_READ | FI_WRITE; /* RMA(read/write)              */
+    hints->caps |= FI_ATOMICS;                  /* Atomics capabilities         */
 
     if (do_tagged) {
         hints->caps |= FI_TAGGED;       /* Tag matching interface  */
