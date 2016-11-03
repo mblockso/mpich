@@ -77,6 +77,12 @@
 #define MPIDI_OFI_ENABLE_STX_RMA 0
 #endif
 
+#ifdef USE_OFI_STX_SEP
+#define MPIDI_OFI_ENABLE_STX_SEP 1
+#else
+#define MPIDI_OFI_ENABLE_STX_SEP 0
+#endif
+
 #ifdef USE_OFI_MR_SCALABLE
 #define MPIDI_OFI_ENABLE_MR_SCALABLE 1
 #else
@@ -194,6 +200,7 @@
 
 #ifdef MPIDI_OFI_CONFIG_USE_SCALABLE_ENDPOINTS
 #define MPIDI_OFI_COMM_TO_EP(comm,rank)  MPIDI_OFI_AV(MPIDIU_comm_rank_to_av(comm, rank)).ep_idx
+#define MPIDI_OFI_EP_STX(x) MPIDI_Global.ctx[x].stx
 #define MPIDI_OFI_EP_TX_TAG(x) MPIDI_Global.ctx[x].tx_tag
 #define MPIDI_OFI_EP_TX_RMA(x) MPIDI_Global.ctx[x].tx_rma
 #define MPIDI_OFI_EP_TX_MSG(x) MPIDI_Global.ctx[x].tx_msg
@@ -203,6 +210,7 @@
 #define MPIDI_OFI_EP_RX_MSG(x) MPIDI_Global.ctx[x].rx_msg
 #else
 #define MPIDI_OFI_COMM_TO_EP(comm,rank) 0
+#define MPIDI_OFI_EP_STX(x) MPIDI_Global.stx_ctx
 #define MPIDI_OFI_EP_TX_TAG(x) MPIDI_Global.ep
 #define MPIDI_OFI_EP_TX_RMA(x) MPIDI_Global.ep
 #define MPIDI_OFI_EP_TX_MSG(x) MPIDI_Global.ep
@@ -314,6 +322,8 @@ typedef struct {
     struct fid_ep *rx_msg;
 
     struct fid_ep *tx_ctr;
+
+    struct fid_stx *stx;
 
     int ctx_offset;
 } MPIDI_OFI_context_t;

@@ -35,6 +35,7 @@ dnl Parse the device arguments
     do_tagged=true
     do_data=true
     do_stx_rma=true
+    do_stx_sep=true
     do_mr_scalable=true
     echo "Parsing Arguments for OFI Netmod"
     for arg in $args_array; do
@@ -62,6 +63,10 @@ dnl Parse the device arguments
       no-stx-rma)
               do_stx_rma=false
               echo " ---> CH4::OFI Disable per-window EP & counter for RMA : $arg"
+	      ;;
+      no-stx-sep)
+              do_stx_sep=false
+              echo " ---> CH4::OFI Disable shared tx contexts for scalable endpoints : $arg"
 	      ;;
       mr-basic)
               do_mr_scalable=false
@@ -99,6 +104,11 @@ dnl Parse the device arguments
     if [test "$do_stx_rma" = "true"]; then
        AC_DEFINE([USE_OFI_STX_RMA], [1], [Define to use per-window EP & counter])
        AC_MSG_NOTICE([Enabling per-window EP & counter])
+    fi
+
+    if [test "$do_stx_sep" = "true"]; then
+       AC_DEFINE([USE_OFI_STX_SEP], [1], [Define to use shared tx contexts for scalable endpoints ])
+       AC_MSG_NOTICE([Enabling shared tx contexts for scalable endpoints])
     fi
 
     if [test "$do_mr_scalable" = "true"]; then

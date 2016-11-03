@@ -24,6 +24,7 @@ static inline int MPIDI_OFI_create_endpoint(struct fi_info *prov_use,
                                             struct fid_ep **ep, int index,
                                             int do_tagged,
                                             int do_scalable_ep,
+                                            int do_stx_sep,
                                             int do_data);
 
 #define MPIDI_OFI_CHOOSE_PROVIDER(prov, prov_use,errstr)                          \
@@ -52,7 +53,7 @@ static inline int MPIDI_OFI_init_generic(int rank,
                                          int do_scalable_ep,
                                          int do_am,
                                          int do_tagged,
-                                         int do_data, int do_stx_rma, int do_mr_scalable)
+                                         int do_data, int do_stx_rma, int do_stx_sep, int do_mr_scalable)
 {
     int mpi_errno = MPI_SUCCESS, pmi_errno, i, fi_version;
     int thr_err = 0, str_errno, maxlen;
@@ -365,6 +366,7 @@ static inline int MPIDI_OFI_init_generic(int rank,
                                                      &MPIDI_Global.ep, 0,
                                                      do_tagged,
                                                      do_scalable_ep,
+                                                     do_stx_sep,
                                                      do_data));
 
     if (do_av_insert) {
@@ -544,14 +546,16 @@ static inline int MPIDI_NM_mpi_init_hook(int rank,
                                        MPIDI_OFI_ENABLE_AM,
                                        MPIDI_OFI_ENABLE_TAGGED,
                                        MPIDI_OFI_ENABLE_DATA,
-                                       MPIDI_OFI_ENABLE_STX_RMA, MPIDI_OFI_ENABLE_MR_SCALABLE);
+                                       MPIDI_OFI_ENABLE_STX_RMA,
+                                       MPIDI_OFI_ENABLE_STX_SEP,
+                                       MPIDI_OFI_ENABLE_MR_SCALABLE);
     return mpi_errno;
 }
 
 
 
 
-static inline int MPIDI_OFI_finalize_generic(int do_tagged, int do_scalable_ep, int do_am, int do_stx_rma)
+static inline int MPIDI_OFI_finalize_generic(int do_tagged, int do_scalable_ep, int do_am, int do_stx_rma, int do_stx_sep)
 {
     int thr_err = 0, mpi_errno = MPI_SUCCESS;
     int i = 0;
@@ -574,6 +578,7 @@ static inline int MPIDI_OFI_finalize_generic(int do_tagged, int do_scalable_ep, 
     MPIR_Assert(OPA_load_int(&MPIDI_Global.am_inflight_inject_emus) == 0);
 
     if (do_scalable_ep) {
+
         if (do_tagged)
             MPIDI_OFI_CALL(fi_close((fid_t) MPIDI_OFI_EP_TX_TAG(0)), epclose);
         MPIDI_OFI_CALL(fi_close((fid_t) MPIDI_OFI_EP_TX_RMA(0)), epclose);
@@ -584,6 +589,9 @@ static inline int MPIDI_OFI_finalize_generic(int do_tagged, int do_scalable_ep, 
             MPIDI_OFI_CALL(fi_close((fid_t) MPIDI_OFI_EP_RX_TAG(0)), epclose);
         MPIDI_OFI_CALL(fi_close((fid_t) MPIDI_OFI_EP_RX_RMA(0)), epclose);
         MPIDI_OFI_CALL(fi_close((fid_t) MPIDI_OFI_EP_RX_MSG(0)), epclose);
+
+        if (do_stx_sep)
+            MPIDI_OFI_CALL(fi_close((fid_t) MPIDI_OFI_EP_STX(0)), stx_ctx_close);
     }
 
     if (do_stx_rma && MPIDI_Global.stx_ctx != NULL)
@@ -636,7 +644,8 @@ static inline int MPIDI_NM_mpi_finalize_hook(void)
 {
     return MPIDI_OFI_finalize_generic(MPIDI_OFI_ENABLE_TAGGED,
                                       MPIDI_OFI_ENABLE_SCALABLE_ENDPOINTS,
-                                      MPIDI_OFI_ENABLE_AM, MPIDI_OFI_ENABLE_STX_RMA);
+                                      MPIDI_OFI_ENABLE_AM, MPIDI_OFI_ENABLE_STX_RMA,
+                                      MPIDI_OFI_ENABLE_STX_SEP);
 }
 
 static inline void *MPIDI_NM_mpi_alloc_mem(size_t size, MPIR_Info * info_ptr)
@@ -791,9 +800,10 @@ static inline int MPIDI_OFI_create_endpoint(struct fi_info *prov_use,
                                             struct fid_ep **ep, int index,
                                             int do_tagged,
                                             int do_scalable_ep,
+                                            int do_stx_sep,
                                             int do_data)
 {
-    int mpi_errno = MPI_SUCCESS;
+    int ret, mpi_errno = MPI_SUCCESS;
     struct fi_tx_attr tx_attr;
     struct fi_rx_attr rx_attr;
 
@@ -808,43 +818,115 @@ static inline int MPIDI_OFI_create_endpoint(struct fi_info *prov_use,
         idx_off = index * 4;
         MPIDI_Global.ctx[index].ctx_offset = idx_off;
 
-        if (do_tagged) {
+        MPIDI_OFI_EP_TX_TAG(index) = NULL;
+        MPIDI_OFI_EP_TX_MSG(index) = NULL;
+        MPIDI_OFI_EP_TX_RMA(index) = NULL;
+        MPIDI_OFI_EP_TX_CTR(index) = NULL;
+
+        MPIDI_OFI_EP_STX(index) = NULL;
+        struct fi_info *finfo;
+
+        if (do_stx_sep) {
             tx_attr = *prov_use->tx_attr;
-            tx_attr.caps = FI_TAGGED;
-            tx_attr.op_flags = FI_COMPLETION | FI_INJECT_COMPLETE;
-            MPIDI_OFI_CALL(fi_tx_context(*ep, idx_off, &tx_attr, &MPIDI_OFI_EP_TX_TAG(index), NULL), ep);
+            MPIDI_OFI_CALL_RETURN(fi_stx_context(domain, &tx_attr, &MPIDI_OFI_EP_STX(index), NULL), ret);
+        }
+
+        if (do_tagged) {
+            if (do_stx_sep) {
+                finfo = fi_dupinfo(prov_use);
+                MPIR_Assert(finfo);
+                finfo->ep_attr->tx_ctx_cnt = FI_SHARED_CONTEXT;
+                finfo->tx_attr->caps = FI_TAGGED | FI_SEND;
+                finfo->tx_attr->op_flags = FI_COMPLETION | FI_INJECT_COMPLETE;
+                finfo->rx_attr->caps = 0;
+                MPIDI_OFI_CALL_RETURN(fi_endpoint(domain, finfo, &MPIDI_OFI_EP_TX_TAG(index), NULL), ret);
+                MPIR_Assert(ret >= 0);
+                fi_freeinfo(finfo);
+                MPIDI_OFI_CALL(fi_ep_bind(MPIDI_OFI_EP_TX_TAG(index), &MPIDI_OFI_EP_STX(index)->fid, 0), bind);
+                MPIDI_OFI_CALL(fi_ep_bind(MPIDI_OFI_EP_TX_TAG(index), &MPIDI_Global.av->fid, 0), bind);
+
+            } else {
+                tx_attr = *prov_use->tx_attr;
+                tx_attr.caps = FI_TAGGED;
+                tx_attr.op_flags = FI_COMPLETION | FI_INJECT_COMPLETE;
+                MPIDI_OFI_CALL(fi_tx_context(*ep, idx_off, &tx_attr, &MPIDI_OFI_EP_TX_TAG(index), NULL), ep);
+            }
             MPIDI_OFI_CALL(fi_ep_bind(MPIDI_OFI_EP_TX_TAG(index), &p2p_cq->fid, FI_SEND | FI_SELECTIVE_COMPLETION), bind);
         }
 
-        tx_attr = *prov_use->tx_attr;
-        tx_attr.caps = FI_RMA;
-        tx_attr.caps |= FI_ATOMICS;
-        tx_attr.op_flags = FI_COMPLETION | FI_DELIVERY_COMPLETE;
-        MPIDI_OFI_CALL(fi_tx_context(*ep, idx_off + 1, &tx_attr, &MPIDI_OFI_EP_TX_RMA(index), NULL),
-                       ep);
-        MPIDI_OFI_CALL(fi_ep_bind(MPIDI_OFI_EP_TX_RMA(index), &rma_ctr->fid, FI_WRITE | FI_READ),
-                       bind);
+        if (do_stx_sep) {
+            finfo = fi_dupinfo(prov_use);
+            MPIR_Assert(finfo);
+            finfo->ep_attr->tx_ctx_cnt = FI_SHARED_CONTEXT;
+            finfo->tx_attr->caps = FI_RMA | FI_ATOMICS | FI_WRITE | FI_READ;
+            finfo->tx_attr->op_flags = FI_COMPLETION | FI_DELIVERY_COMPLETE;
+            finfo->rx_attr->caps = 0;
+            MPIDI_OFI_CALL_RETURN(fi_endpoint(domain, finfo, &MPIDI_OFI_EP_TX_RMA(index), NULL), ret);
+            MPIR_Assert(ret >= 0);
+            fi_freeinfo(finfo);
+            MPIDI_OFI_CALL(fi_ep_bind(MPIDI_OFI_EP_TX_RMA(index), &MPIDI_OFI_EP_STX(index)->fid, 0), bind);
+            MPIDI_OFI_CALL(fi_ep_bind(MPIDI_OFI_EP_TX_RMA(index), &MPIDI_Global.av->fid, 0), bind);
+
+        } else {
+            tx_attr = *prov_use->tx_attr;
+            tx_attr.caps = FI_RMA;
+            tx_attr.caps |= FI_ATOMICS;
+            tx_attr.op_flags = FI_COMPLETION | FI_DELIVERY_COMPLETE;
+            MPIDI_OFI_CALL(fi_tx_context(*ep, idx_off + 1, &tx_attr, &MPIDI_OFI_EP_TX_RMA(index), NULL), ep);
+        }
+        MPIDI_OFI_CALL(fi_ep_bind(MPIDI_OFI_EP_TX_RMA(index), &rma_ctr->fid, FI_WRITE | FI_READ), bind);
         MPIDI_OFI_CALL(fi_ep_bind(MPIDI_OFI_EP_TX_RMA(index), &p2p_cq->fid, FI_SEND | FI_SELECTIVE_COMPLETION), bind);
 
-        tx_attr = *prov_use->tx_attr;
-        tx_attr.caps = FI_MSG;
-        tx_attr.op_flags = FI_COMPLETION | FI_INJECT_COMPLETE;
-        MPIDI_OFI_CALL(fi_tx_context(*ep, idx_off + 2, &tx_attr, &MPIDI_OFI_EP_TX_MSG(index), NULL),
-                       ep);
+        if (do_stx_sep) {
+            finfo = fi_dupinfo(prov_use);
+            MPIR_Assert(finfo);
+            finfo->ep_attr->tx_ctx_cnt = FI_SHARED_CONTEXT;
+            finfo->tx_attr->caps = FI_MSG | FI_SEND;
+            finfo->tx_attr->op_flags = FI_COMPLETION | FI_INJECT_COMPLETE;
+            finfo->rx_attr->caps = 0;
+            MPIDI_OFI_CALL_RETURN(fi_endpoint(domain, finfo, &MPIDI_OFI_EP_TX_MSG(index), NULL), ret);
+            MPIR_Assert(ret >= 0);
+            fi_freeinfo(finfo);
+            MPIDI_OFI_CALL(fi_ep_bind(MPIDI_OFI_EP_TX_MSG(index), &MPIDI_OFI_EP_STX(index)->fid, 0), bind);
+            MPIDI_OFI_CALL(fi_ep_bind(MPIDI_OFI_EP_TX_MSG(index), &MPIDI_Global.av->fid, 0), bind);
+
+        } else {
+            tx_attr = *prov_use->tx_attr;
+            tx_attr.caps = FI_MSG;
+            tx_attr.op_flags = FI_COMPLETION | FI_INJECT_COMPLETE;
+            MPIDI_OFI_CALL(fi_tx_context(*ep, idx_off + 2, &tx_attr, &MPIDI_OFI_EP_TX_MSG(index), NULL), ep);
+        }
         MPIDI_OFI_CALL(fi_ep_bind(MPIDI_OFI_EP_TX_MSG(index), &p2p_cq->fid, FI_SEND | FI_SELECTIVE_COMPLETION), bind);
 
-        tx_attr = *prov_use->tx_attr;
-        tx_attr.caps = FI_RMA;
-        tx_attr.caps |= FI_ATOMICS;
-        tx_attr.op_flags = FI_DELIVERY_COMPLETE;
-        MPIDI_OFI_CALL(fi_tx_context(*ep, idx_off + 3, &tx_attr, &MPIDI_OFI_EP_TX_CTR(index), NULL),
-                       ep);
-        MPIDI_OFI_CALL(fi_ep_bind(MPIDI_OFI_EP_TX_CTR(index), &rma_ctr->fid, FI_WRITE | FI_READ),
-                       bind);
+        if (do_stx_sep) {
+            finfo = fi_dupinfo(prov_use);
+            MPIR_Assert(finfo);
+            finfo->ep_attr->tx_ctx_cnt = FI_SHARED_CONTEXT;
+            finfo->tx_attr->caps = FI_RMA | FI_ATOMICS | FI_WRITE | FI_READ;
+            finfo->tx_attr->op_flags = FI_COMPLETION | FI_DELIVERY_COMPLETE;
+            finfo->rx_attr->caps = 0;
+            MPIDI_OFI_CALL_RETURN(fi_endpoint(domain, finfo, &MPIDI_OFI_EP_TX_CTR(index), NULL), ret);
+            MPIR_Assert(ret >= 0);
+            fi_freeinfo(finfo);
+            MPIDI_OFI_CALL(fi_ep_bind(MPIDI_OFI_EP_TX_CTR(index), &MPIDI_OFI_EP_STX(index)->fid, 0), bind);
+            MPIDI_OFI_CALL(fi_ep_bind(MPIDI_OFI_EP_TX_CTR(index), &MPIDI_Global.av->fid, 0), bind);
+
+        } else {
+            tx_attr = *prov_use->tx_attr;
+            tx_attr.caps = FI_RMA;
+            tx_attr.caps |= FI_ATOMICS;
+            tx_attr.op_flags = FI_DELIVERY_COMPLETE;
+            MPIDI_OFI_CALL(fi_tx_context(*ep, idx_off + 3, &tx_attr, &MPIDI_OFI_EP_TX_CTR(index), NULL), ep);
+        }
         /* We need to bind to the CQ if the progress mode is manual.
            Otherwise fi_cq_read would not make progress on this context and potentially leads to a deadlock. */
         if (prov_use->domain_attr->data_progress == FI_PROGRESS_MANUAL)
             MPIDI_OFI_CALL(fi_ep_bind(MPIDI_OFI_EP_TX_CTR(index), &p2p_cq->fid, FI_SEND | FI_SELECTIVE_COMPLETION), bind);
+
+        MPIDI_OFI_CALL(fi_ep_bind(MPIDI_OFI_EP_TX_CTR(index), &rma_ctr->fid, FI_WRITE | FI_READ), bind);
+
+
+
 
         if (do_tagged) {
             rx_attr = *prov_use->rx_attr;
@@ -881,6 +963,7 @@ static inline int MPIDI_OFI_create_endpoint(struct fi_info *prov_use,
         MPIDI_OFI_CALL(fi_ep_bind(MPIDI_OFI_EP_RX_MSG(index), &p2p_cq->fid, FI_RECV), bind);
 
         MPIDI_OFI_CALL(fi_enable(*ep), ep_enable);
+
 
         if (do_tagged)
             MPIDI_OFI_CALL(fi_enable(MPIDI_OFI_EP_TX_TAG(index)), ep_enable);
