@@ -58,6 +58,34 @@ MPL_STATIC_INLINE_PREFIX int MPID_Progress_test(void)
     goto fn_exit;;
 }
 
+#undef FUNCNAME
+#define FUNCNAME MPIDI_Progress_test
+#undef FCNAME
+#define FCNAME MPL_QUOTE(FUNCNAME)
+MPL_STATIC_INLINE_PREFIX MPIR_cc_t MPID_Progress_test_request(MPID_Progress_state * state, MPIR_Request * request_ptr)
+{
+    int mpi_errno;
+
+    MPIR_FUNC_VERBOSE_STATE_DECL(MPID_STATE_MPID_PROGRESS_TEST_REQUEST);
+    MPIR_FUNC_VERBOSE_ENTER(MPID_STATE_MPID_PROGRESS_TEST_REQUEST);
+
+    mpi_errno = MPID_NM_progress_test_request(request_ptr);
+    if (mpi_errno != MPI_SUCCESS) {
+        MPIR_ERR_POP(mpi_errno);
+    }
+#ifdef MPIDI_CH4_EXCLUSIVE_SHM
+//    mpi_errno = MPIDI_SHM_progress(0);
+//    if (mpi_errno != MPI_SUCCESS) {
+//        MPIR_ERR_POP(mpi_errno);
+//    }
+#endif
+  fn_exit:
+    MPIR_FUNC_VERBOSE_EXIT(MPID_STATE_MPID_PROGRESS_TEST_REQUEST);
+    return MPIR_Request_is_complete(request_ptr);
+  fn_fail:
+    goto fn_exit;
+}
+
 MPL_STATIC_INLINE_PREFIX int MPID_Progress_poke(void)
 {
     int ret;

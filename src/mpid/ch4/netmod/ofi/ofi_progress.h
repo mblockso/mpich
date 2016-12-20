@@ -49,4 +49,25 @@ MPL_STATIC_INLINE_PREFIX int MPIDI_NM_progress(int vni, int blocking)
     return mpi_errno;
 }
 
+#undef FUNCNAME
+#define FUNCNAME MPID_NM_progress_test_request
+#undef FCNAME
+#define FCNAME MPL_QUOTE(FUNCNAME)
+static inline int MPID_NM_progress_test_request(MPIR_Request * request_ptr)
+{
+    int mpi_errno = 0;
+    MPIR_FUNC_VERBOSE_STATE_DECL(MPID_STATE_MPIDI_NM_PROGRESS);
+    MPIR_FUNC_VERBOSE_ENTER(MPID_STATE_MPIDI_NM_PROGRESS);
+
+    struct fi_cq_tagged_entry wc;
+    if (FI_SUCCESS == fi_cq_read_context((void *) &(MPIDI_OFI_REQUEST(request_ptr, context)), (void *) &wc, FI_CQ_FORMAT_TAGGED)) {
+        mpi_errno = MPIDI_OFI_dispatch_function(&wc, request_ptr, 0);
+    }
+
+    MPIR_FUNC_VERBOSE_EXIT(MPID_STATE_MPIDI_NM_PROGRESS);
+    return mpi_errno;
+}
+
+
+
 #endif /* OFI_PROGRESS_H_INCLUDED */

@@ -220,7 +220,7 @@ int MPIC_Wait(MPIR_Request * request_ptr, MPIR_Errflag_t *errflag)
 	MPID_Progress_state progress_state;
 	
 	MPID_Progress_start(&progress_state);
-        while (!MPIR_Request_is_complete(request_ptr))
+        while (!MPID_Progress_test_request(&progress_state, request_ptr))
 	{
 	    mpi_errno = MPID_Progress_wait(&progress_state);
 	    if (mpi_errno) { MPIR_ERR_POP(mpi_errno); }

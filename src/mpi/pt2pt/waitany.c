@@ -163,7 +163,7 @@ int MPI_Waitany(int count, MPI_Request array_of_requests[], int *indx,
                 mpi_errno = (request_ptrs[i]->u.ureq.greq_fns->poll_fn)(request_ptrs[i]->u.ureq.greq_fns->grequest_extra_state, status);
 		if (mpi_errno != MPI_SUCCESS) goto fn_progress_end_fail;
 	    }
-            if (MPIR_Request_is_complete(request_ptrs[i]))
+            if (MPID_Progress_test_request(&progress_state, request_ptrs[i]))
 	    {
 		mpi_errno = MPIR_Request_complete(&array_of_requests[i], 
 						  request_ptrs[i], status, 

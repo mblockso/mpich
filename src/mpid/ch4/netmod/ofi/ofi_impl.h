@@ -439,10 +439,10 @@ MPL_STATIC_INLINE_PREFIX int MPIDI_OFI_send_handler(struct fid_ep *ep, const voi
     }
     else {
         if (MPIDI_OFI_ENABLE_DATA)
-            MPIDI_OFI_CALL_RETRY(fi_tsenddata(ep, buf, len, desc, dest, dest_addr, tag, context),
+            MPIDI_OFI_CALL_RETRY(fi_tsenddata(ep, buf, len, (void*)1 /*desc*/, dest, dest_addr, tag, context),
                                  tsenddata, do_lock);
         else
-            MPIDI_OFI_CALL_RETRY(fi_tsend(ep, buf, len, desc, dest_addr, tag, context), tsend,
+            MPIDI_OFI_CALL_RETRY(fi_tsend(ep, buf, len, (void*)1 /*desc*/, dest_addr, tag, context), tsend,
                                  do_lock);
     }
 

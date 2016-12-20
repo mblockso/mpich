@@ -150,7 +150,7 @@ int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag,
 	MPID_Progress_state progress_state;
 	    
 	MPID_Progress_start(&progress_state);
-        while (!MPIR_Request_is_complete(request_ptr))
+        while (!MPID_Progress_test_request(&progress_state, request_ptr))
 	{
 	    /* MT: Progress_wait may release the SINGLE_CS while it
 	       waits */

@@ -160,7 +160,7 @@ int MPIR_Waitall_impl(int count, MPI_Request array_of_requests[],
     if (optimize) {
         MPID_Progress_start(&progress_state);
         for (i = 0; i < count; ++i) {
-            while (!MPIR_Request_is_complete(request_ptrs[i])) {
+            while (!MPID_Progress_test_request(&progress_state, request_ptrs[i])) {
                 mpi_errno = MPID_Progress_wait(&progress_state);
                 /* must check and handle the error, can't guard with HAVE_ERROR_CHECKING, but it's
                  * OK for the error case to be slower */
@@ -209,7 +209,7 @@ int MPIR_Waitall_impl(int count, MPI_Request array_of_requests[],
         }
         
         /* wait for ith request to complete */
-        while (!MPIR_Request_is_complete(request_ptrs[i]))
+        while (!MPID_Progress_test_request(&progress_state, request_ptrs[i]))
         {
             /* generalized requests should already be finished */
             MPIR_Assert(request_ptrs[i]->kind != MPIR_REQUEST_KIND__GREQUEST);

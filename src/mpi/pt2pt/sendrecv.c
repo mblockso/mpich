@@ -179,7 +179,7 @@ int MPI_Sendrecv(const void *sendbuf, int sendcount, MPI_Datatype sendtype,
 	MPID_Progress_state progress_state;
 	
 	MPID_Progress_start(&progress_state);
-        while (!MPIR_Request_is_complete(sreq) || !MPIR_Request_is_complete(rreq))
+        while (!MPID_Progress_test_request(&progress_state, sreq) ||!MPID_Progress_test_request(&progress_state, rreq))
 	{
 	    mpi_errno = MPID_Progress_wait(&progress_state);
 	    if (mpi_errno != MPI_SUCCESS)
